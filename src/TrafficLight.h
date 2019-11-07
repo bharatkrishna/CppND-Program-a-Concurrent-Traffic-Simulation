@@ -24,7 +24,7 @@ public:
     void send(T &&msg);
 
 private:
-    std::deque<TrafficLightPhase> _messages;
+    std::deque<TrafficLightPhase> _queue;
     std::condition_variable _condition;
     std::mutex _mutex;
 };
@@ -40,7 +40,6 @@ class TrafficLight : public TrafficObject
 public:
     // constructor / desctructor
     TrafficLight();
-    ~TrafficLight();
     // getters / setters
     TrafficLightPhase getCurrentPhase();
     // typical behaviour methods
@@ -58,7 +57,7 @@ private:
     TrafficLightPhase _currentPhase;
     std::condition_variable _condition;
     std::mutex _mutex;
-    std::shared_ptr<MessageQueue<TrafficLightPhase>> _queue;
+    std::shared_ptr<MessageQueue<TrafficLightPhase>> _trafficLightQueue;
 };
 
 #endif

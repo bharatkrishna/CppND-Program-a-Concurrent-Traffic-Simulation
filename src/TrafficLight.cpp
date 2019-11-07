@@ -14,11 +14,11 @@ T MessageQueue<T>::receive()
 
     // perform queue modification under the lock
     std::unique_lock<std::mutex> uLock(_mutex);
-    _condition.wait(uLock, [this] { return !_messages.empty(); }); // pass unique lock to condition variable
+    _condition.wait(uLock, [this] { return !_queue.empty(); }); // pass unique lock to condition variable
 
     // remove last vector element from queue
-    T msg = std::move(_messages.back());
-    _messages.pop_back();
+    T msg = std::move(_queue.back());
+    _queue.pop_back();
 
     return msg;
 }
@@ -36,8 +36,8 @@ void MessageQueue<T>::send(T &&msg)
     std::lock_guard<std::mutex> uLock(_mutex);
 
     // add vector to queue
-    std::cout << "   Message " << msg << " has been sent to the queue" << std::endl;
-    _messages.push_back(std::move(msg));
+    // std::cout << "   Message " << msg << " has been sent to the queue" << std::endl;
+    _queue.push_back(std::move(msg));
     _condition.notify_one(); // notify client after pushing new Vehicle into vector
 }
 
@@ -47,6 +47,7 @@ void MessageQueue<T>::send(T &&msg)
 TrafficLight::TrafficLight()
 {
     _currentPhase = TrafficLightPhase::red;
+    _trafficLightQueue = std::make_shared<MessageQueue<TrafficLightPhase>>();
 }
 
 void TrafficLight::waitForGreen()
@@ -58,7 +59,7 @@ void TrafficLight::waitForGreen()
     while (true)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        auto message = _queue->receive();
+        auto message = _trafficLightQueue->receive();
         if (message == TrafficLightPhase::green) return;
     }
 }
@@ -82,8 +83,9 @@ void TrafficLight::cycleThroughPhases()
     // to the message queue using move semantics. The cycle duration should be a random value between 4 and 6 seconds.
     // Also, the while-loop should use std::this_thread::sleep_for to wait 1ms between two cycles.
     std::chrono::time_point<std::chrono::system_clock> lastUpdate;
-    std::default_random_engine generator;
-    std::uniform_int_distribution<long> distribution(4, 6);
+    std::random_device r;
+    std::default_random_engine e1(r());
+    std::uniform_int_distribution<int> uniform_dist(4, 6);
 
     lastUpdate = std::chrono::system_clock::now();
     while (true)
@@ -91,14 +93,15 @@ void TrafficLight::cycleThroughPhases()
         // sleep at every iteration to reduce CPU usage
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
-        long timeSinceLastUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - lastUpdate).count();
-        long cycleDuration = distribution(generator);
+        long timeSinceLastUpdate = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - lastUpdate).count();
+        long cycleDuration = uniform_dist(e1);
         if (timeSinceLastUpdate >= cycleDuration) {
             _currentPhase = (_currentPhase == TrafficLightPhase::red) ? TrafficLightPhase::green : TrafficLightPhase::red;
-        }
+            auto ftr = std::async(std::launch::async, &MessageQueue<TrafficLightPhase>::send, _trafficLightQueue, std::move(_currentPhase));
+            ftr.wait();
 
-        auto ftr = std::async(std::launch::async, &MessageQueue<TrafficLightPhase>::send, _queue, std::move(_currentPhase));
-        ftr.wait();
+            lastUpdate = std::chrono::system_clock::now();
+        }
     }
 
 }
